@@ -44,6 +44,7 @@ Layered defense — each layer is cheap and catches a different failure mode:
 | Auth & Verification | **Atlas** | `backend/app/routers/auth.py`, `backend/app/services/`, email sending | `docs/agents/ATLAS_auth_verification.md` |
 | Marketplace Backend | **Mercury** | `backend/app/routers/listings.py`, models, search/geo | `docs/agents/MERCURY_marketplace_backend.md` |
 | Frontend | **Nova** | Everything in `frontend/` | `docs/agents/NOVA_frontend.md` |
+| Messaging & Comments | **Echo** | `backend/app/routers/comments.py`, `backend/app/routers/messages.py`, DM/comment models | `docs/agents/ECHO_messaging_comments.md` |
 | Infra, DB & CI | **Forge** | Docker, Postgres migration, CI, deployment | `docs/agents/FORGE_infra.md` |
 | QA & Security | **Sentinel** | Tests (backend + e2e), security review | `docs/agents/SENTINEL_qa.md` |
 
@@ -60,11 +61,15 @@ Layered defense — each layer is cheap and catches a different failure mode:
 - **Nova**: profile page, listing detail page, image upload UI (behind API contract).
 
 **Wave 2 (after Wave 1 merges):**
-- **Mercury**: image uploads (S3/UploadThing), pagination, categories, geocoding of location names (so users type "Austin, TX" instead of lat/lng).
+- **Mercury**: listing lifecycle first — `status` (open/sold/expired/removed) + `expires_at` with seller-picked duration (7/14/30 days) and renew endpoint — then image uploads (S3/UploadThing), pagination, categories, geocoding of location names (so users type "Austin, TX" instead of lat/lng).
 - **Sentinel**: pytest suite for auth + listings, Playwright e2e for the login→post→search flow.
 
-**Wave 3:**
-- Messaging between buyer/seller, notifications, moderation/reporting, deployment to production.
+**Wave 3 (after Mercury's listing-status PR merges — Echo depends on it):**
+- **Echo**: comments on listings (public Q&A, locked once sold/expired) and per-listing DMs (one conversation per buyer per listing, inbox with unread counts; polling for MVP).
+- **Nova**: lifecycle UI (mark-as-sold/renew, SOLD badges, expiry picker), then comments + DM inbox UI as Echo's endpoints land.
+
+**Wave 4:**
+- Notifications, moderation/reporting, WebSocket real-time DMs, deployment to production.
 
 ## 6. Running locally
 
