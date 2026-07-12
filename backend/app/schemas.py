@@ -58,3 +58,27 @@ class ListingOut(BaseModel):
     is_active: bool
     created_at: datetime
     seller: SellerOut
+
+
+class CommentAuthorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
+class CommentIn(BaseModel):
+    body: str
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    listing_id: int
+    author_id: int
+    body: str
+    is_deleted: bool
+    created_at: datetime
+    author: CommentAuthorOut
