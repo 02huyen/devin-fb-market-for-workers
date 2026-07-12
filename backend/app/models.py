@@ -1,9 +1,14 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
+
+
+def _default_expires_at() -> datetime:
+    return datetime.utcnow() + timedelta(days=30)
 
 
 class User(Base):
@@ -41,8 +46,14 @@ class Listing(Base):
     location_name: Mapped[str] = mapped_column(String(255), default="")
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, default=_default_expires_at)
+    sold_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     seller: Mapped[User] = relationship(back_populates="listings")
+
+    @hybrid_property
+    def is_active(self) -> bool:
+        return self.status == "open"
