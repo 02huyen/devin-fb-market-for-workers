@@ -3,16 +3,24 @@ from pathlib import Path
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 SQLALCHEMY_DATABASE_URL = os.environ.get("DATABASE_URL") or "sqlite:///./workplace_market.db"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False}
-    if SQLALCHEMY_DATABASE_URL.startswith("sqlite")
-    else {},
-    pool_pre_ping=True,
-)
+_engine_kwargs = {
+    "pool_pre_ping": True,
+}
+if SQLALCHEMY_DATABASE_URL == "sqlite:///:memory:":
+    _engine_kwargs.update(
+        {
+            "connect_args": {"check_same_thread": False},
+            "poolclass": StaticPool,
+        }
+    )
+elif SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
