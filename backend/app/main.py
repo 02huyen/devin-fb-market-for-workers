@@ -1,12 +1,14 @@
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
-from .database import Base, engine
-from .routers import auth, comments, listings
+from .database import setup_database
+from .routers import auth, comments, listings, messages
 
-Base.metadata.create_all(bind=engine)
+setup_database()
 
 app = FastAPI(title="Workplace Market API")
 
@@ -18,9 +20,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+upload_dir = Path(os.environ.get("UPLOAD_DIR", "./uploads"))
+upload_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
+
 app.include_router(auth.router)
-app.include_router(listings.router)
 app.include_router(comments.router)
+app.include_router(listings.router)
+app.include_router(messages.router)
 
 
 @app.get("/health")

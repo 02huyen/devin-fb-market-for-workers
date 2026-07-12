@@ -24,6 +24,10 @@ class UserOut(BaseModel):
     is_verified: bool
 
 
+class UserUpdate(BaseModel):
+    display_name: str
+
+
 class SellerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +38,88 @@ class SellerOut(BaseModel):
     display_name: str
 
 
+class ListingImageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    url: str
+    created_at: datetime
+
+
+class CommentAuthorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
+class CommentIn(BaseModel):
+    text: str
+
+
+class CommentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    listing_id: int
+    author_id: int
+    text: str
+    is_deleted: bool
+    created_at: datetime
+    author: CommentAuthorOut
+
+
+class ConversationParticipantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
+class ListingSnippetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    listing_type: str
+
+
+class MessageIn(BaseModel):
+    text: str
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    conversation_id: int
+    sender_id: int
+    text: str
+    created_at: datetime
+    read_at: datetime | None
+    sender: ConversationParticipantOut
+
+
+class ConversationIn(BaseModel):
+    text: str | None = None
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    listing_id: int
+    buyer_id: int
+    listing: ListingSnippetOut
+    other_participant: ConversationParticipantOut
+    unread_count: int
+    created_at: datetime
+    updated_at: datetime
+    last_message: MessageOut | None
+
+
 class ListingIn(BaseModel):
     title: str
     description: str = ""
@@ -42,6 +128,7 @@ class ListingIn(BaseModel):
     location_name: str = ""
     latitude: float | None = None
     longitude: float | None = None
+    expiry_days: int | None = 7
 
 
 class ListingOut(BaseModel):
@@ -56,29 +143,8 @@ class ListingOut(BaseModel):
     latitude: float | None
     longitude: float | None
     is_active: bool
+    status: str
+    expires_at: datetime | None
     created_at: datetime
     seller: SellerOut
-
-
-class CommentAuthorOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    display_name: str
-    company_name: str
-
-
-class CommentIn(BaseModel):
-    body: str
-
-
-class CommentOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    listing_id: int
-    author_id: int
-    body: str
-    is_deleted: bool
-    created_at: datetime
-    author: CommentAuthorOut
+    images: list[ListingImageOut] = []

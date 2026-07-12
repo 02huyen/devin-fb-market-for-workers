@@ -28,7 +28,7 @@ def get_listing_comments(
     return comments
 
 
-@router.post("/listings/{listing_id}/comments", response_model=CommentOut, status_code=201)
+@router.post("/listings/{listing_id}/comments", response_model=CommentOut)
 def create_comment(
     listing_id: int,
     payload: CommentIn,
@@ -38,13 +38,13 @@ def create_comment(
     listing = db.get(Listing, listing_id)
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
-    if not listing.is_active:
-        raise HTTPException(status_code=400, detail="Listing is not open for comments")
+    if listing.status != "open":
+        raise HTTPException(status_code=403, detail="This listing is no longer open for comments")
 
     comment = Comment(
         listing_id=listing_id,
         author_id=user.id,
-        body=payload.body,
+        text=payload.text,
     )
     db.add(comment)
     db.commit()
