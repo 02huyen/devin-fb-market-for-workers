@@ -21,6 +21,21 @@ npm install && npm run dev
 
 Sign in with any real company email (e.g. `you@yourcompany.com`). In dev mode the magic link is shown inline on the login page — no email provider needed. Gmail/Yahoo/disposable domains are rejected.
 
+## Docker local dev
+
+One-command setup with Postgres, backend, and frontend:
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Postgres: `localhost:5432` (user/pass/db in `.env`)
+
+The first build may take a few minutes. Use `docker compose down -v` to remove the Postgres volume.
+
 ## Environment variables
 
 | Var | Where | Purpose |
