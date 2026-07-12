@@ -1,37 +1,68 @@
-import pytest
-from unittest.mock import Mock
-
 import dns.resolver
+import pytest
 
-from app.services.email_validation import EmailValidationError, validate_work_email
+from app.services.email_validation import (
+    EmailValidationError,
+    _is_disposable_domain,
+    validate_work_email,
+)
 
 
-@pytest.mark.asyncio
-async def test_accepts_work_email(monkeypatch):
-    monkeypatch.setattr(
-        "app.services.email_validation.dns.resolver.resolve",
-        lambda *args, **kwargs: [Mock()],
-    )
-    domain, company = await validate_work_email("dev@example.com")
+class FakeResponse:
+    def __init__(self, status_code, json_data, text=""):
+        self.status_code = status_code
+        self._json = json_data
+        self.text = text
+
+    def json(self):
+        return self._json
+
+
+@pytest.fixture
+def fake_abstract_get(monkeypatch):
+    async def _get(self, *args, **kwargs):
+        return FakeResponse(200, {"name": "Example Inc"})
+
+    monkeypatch.setattr("httpx.AsyncClient.get", _get)
+
+
+async def test_extract_domain_and_validate_work_email():
+    domain, company = await validate_work_email("user@example.com")
     assert domain == "example.com"
     assert company == "Example"
 
 
-@pytest.mark.asyncio
-async def test_rejects_free_email():
+async def test_validate_work_email_rejects_free_email():
     with pytest.raises(EmailValidationError) as exc:
-        await validate_work_email("test@gmail.com")
-    assert "Personal email" in exc.value.message
+        await validate_work_email("user@gmail.com")
+    assert "work email" in exc.value.message
 
 
-@pytest.mark.asyncio
-async def test_rejects_disposable_email():
+async def test_validate_work_email_rejects_disposable_email():
     with pytest.raises(EmailValidationError) as exc:
-        await validate_work_email("test@mailinator.com")
+        await validate_work_email("user@mailinator.com")
     assert "Disposable" in exc.value.message
 
 
-@pytest.mark.asyncio
+async def test_validate_work_email_rejects_package_blocklist():
+    with pytest.raises(EmailValidationError) as exc:
+        await validate_work_email("user@laptoplonghai.com")
+    assert "Disposable" in exc.value.message
+
+
+async def test_is_disposable_domain_checks_parent_domains():
+    assert _is_disposable_domain("sub.yopmail.com") is True
+    assert _is_disposable_domain("yopmail.com") is True
+    assert _is_disposable_domain("example.com") is False
+
+
+async def test_lookup_company_name_abstract_api(fake_abstract_get, monkeypatch):
+    monkeypatch.setenv("EMAIL_VERIFY_API_KEY", "test-abstract-key")
+    domain, company = await validate_work_email("user@example.com")
+    assert domain == "example.com"
+    assert company == "Example Inc"
+
+
 async def test_rejects_no_mx_records(monkeypatch):
     monkeypatch.setattr(
         "app.services.email_validation.dns.resolver.resolve",
@@ -42,7 +73,6 @@ async def test_rejects_no_mx_records(monkeypatch):
     assert "cannot receive email" in exc.value.message
 
 
-@pytest.mark.asyncio
 async def test_rejects_nxdomain(monkeypatch):
     monkeypatch.setattr(
         "app.services.email_validation.dns.resolver.resolve",
