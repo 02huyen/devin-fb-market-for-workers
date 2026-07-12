@@ -14,7 +14,7 @@ from ..auth_utils import (
 )
 from ..database import get_db
 from ..models import MagicLinkToken, User
-from ..schemas import RequestLinkIn, RequestLinkOut, UserOut
+from ..schemas import RequestLinkIn, RequestLinkOut, UserOut, UserUpdate
 from ..services.email_sender import send_magic_link_email
 from ..services.email_validation import EmailValidationError, validate_work_email
 from ..services.rate_limiter import rate_limiter
@@ -142,6 +142,18 @@ def verify(token: str, response: Response, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
+    return user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_me(
+    payload: UserUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user.display_name = payload.display_name.strip()
+    db.commit()
+    db.refresh(user)
     return user
 
 
