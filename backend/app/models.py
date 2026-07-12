@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -46,3 +46,40 @@ class Listing(Base):
 
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     seller: Mapped[User] = relationship(back_populates="listings")
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "buyer_id", name="uq_conversation_listing_buyer"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+    listing: Mapped[Listing] = relationship("Listing", foreign_keys=[listing_id])
+    buyer: Mapped[User] = relationship("User", foreign_keys=[buyer_id])
+    messages: Mapped[list["Message"]] = relationship(
+        "Message", back_populates="conversation", order_by="Message.created_at.desc()"
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    body: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    conversation: Mapped[Conversation] = relationship(
+        "Conversation", back_populates="messages", foreign_keys=[conversation_id]
+    )
+    sender: Mapped[User] = relationship("User", foreign_keys=[sender_id])

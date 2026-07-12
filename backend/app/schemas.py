@@ -58,3 +58,53 @@ class ListingOut(BaseModel):
     is_active: bool
     created_at: datetime
     seller: SellerOut
+
+
+class ConversationParticipantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
+class ListingSnippetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    listing_type: str
+
+
+class MessageIn(BaseModel):
+    body: str
+
+
+class MessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    conversation_id: int
+    sender_id: int
+    body: str
+    created_at: datetime
+    read_at: datetime | None
+    sender: ConversationParticipantOut
+
+
+class ConversationIn(BaseModel):
+    body: str | None = None
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    listing_id: int
+    buyer_id: int
+    listing: ListingSnippetOut
+    other_participant: ConversationParticipantOut
+    unread_count: int
+    created_at: datetime
+    updated_at: datetime
+    last_message: MessageOut | None
