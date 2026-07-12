@@ -3,10 +3,10 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import Base, engine
+from .database import setup_database
 from .routers import auth, listings, messages
 
-Base.metadata.create_all(bind=engine)
+setup_database()
 
 app = FastAPI(title="Workplace Market API")
 
