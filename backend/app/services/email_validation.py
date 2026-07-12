@@ -5,8 +5,9 @@ Strategy (layered):
 2. Reject known free/disposable email providers via a domain blocklist.
 3. Verify the domain has MX records (i.e. it can actually receive mail).
 4. (Optional, production) Call a third-party enrichment/verification API
-   (e.g. Hunter.io, Abstract API, Clearbit) to confirm the domain belongs
-   to a real company and fetch its name. Controlled by EMAIL_VERIFY_API_KEY.
+   to confirm the domain belongs to a real company and fetch its name.
+   Hunter.io (HUNTER_API_KEY) is preferred; Abstract API
+   (EMAIL_VERIFY_API_KEY) is supported as an alternative.
 """
 
 import os
@@ -70,9 +71,25 @@ def check_mx_records(domain: str) -> None:
 async def lookup_company_name(domain: str) -> str:
     """Best-effort company name lookup for the domain.
 
-    If EMAIL_VERIFY_API_KEY is set, uses Abstract API company enrichment.
-    Otherwise falls back to a prettified domain name.
+    Uses Hunter.io if HUNTER_API_KEY is set, else Abstract API if
+    EMAIL_VERIFY_API_KEY is set, else falls back to a prettified domain name.
     """
+    hunter_key = os.environ.get("HUNTER_API_KEY")
+    if hunter_key:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(
+                    "https://api.hunter.io/v2/domain-search",
+                    params={"domain": domain, "api_key": hunter_key},
+                )
+                if resp.status_code == 200:
+                    data = resp.json().get("data", {})
+                    name = data.get("organization")
+                    if name:
+                        return name
+        except httpx.HTTPError:
+            pass
+
     api_key = os.environ.get("EMAIL_VERIFY_API_KEY")
     if api_key:
         try:

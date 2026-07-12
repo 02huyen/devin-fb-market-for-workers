@@ -9,6 +9,7 @@ from ..auth_utils import SESSION_COOKIE, SESSION_MAX_AGE, create_session_token, 
 from ..database import get_db
 from ..models import MagicLinkToken, User
 from ..schemas import RequestLinkIn, RequestLinkOut, UserOut
+from ..services.email_sender import send_magic_link_email
 from ..services.email_validation import EmailValidationError, validate_work_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -47,9 +48,13 @@ async def request_link(payload: RequestLinkIn, db: Session = Depends(get_db)):
     db.commit()
 
     magic_link = f"{FRONTEND_URL}/verify?token={token}"
-    # Production: send magic_link via an email provider (Resend/SendGrid/SES).
+    sent = await send_magic_link_email(email, magic_link)
+    if not sent and not DEV_MODE:
+        raise HTTPException(status_code=502, detail="Could not send sign-in email. Please try again.")
     return RequestLinkOut(
-        message="Check your work email for a sign-in link.",
+        message="Check your work email for a sign-in link."
+        if sent
+        else "Dev mode: use the link below to sign in.",
         dev_magic_link=magic_link if DEV_MODE else None,
     )
 
