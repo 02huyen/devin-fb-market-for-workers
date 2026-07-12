@@ -1,14 +1,27 @@
 import math
+import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
 from ..auth_utils import get_current_user
 from ..database import get_db
-from ..models import Listing, User
-from ..schemas import ListingIn, ListingOut, ListingStatusPatchIn, RenewIn
+from ..models import Comment, Listing, ListingImage, User
+from ..schemas import (
+    CommentIn,
+    CommentOut,
+    ListingImageOut,
+    ListingIn,
+    ListingOut,
+    ListingStatusPatchIn,
+    RenewIn,
+)
+
+UPLOAD_DIR = Path(os.environ.get("UPLOAD_DIR", "./uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(prefix="/listings", tags=["listings"])
 
@@ -25,6 +38,14 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+def _resolve_expiry_days(payload: ListingIn | ListingStatusPatchIn | RenewIn | None) -> int:
+    """Return the expiry value from the preferred field, falling back to 30."""
+    if payload is None:
+        return 30
+    expires = payload.expires_in_days if payload.expires_in_days is not None else payload.expiry_days
+    return expires if expires is not None else 30
 
 
 def _expire_old_listings(db: Session) -> None:
@@ -55,6 +76,7 @@ def list_listings(
     lat: float | None = None,
     lng: float | None = None,
     radius_miles: float = Query(default=50.0, gt=0),
+    seller_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -64,7 +86,9 @@ def list_listings(
     if status not in LISTING_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
 
-    query = db.query(Listing).options(joinedload(Listing.seller))
+    query = db.query(Listing).options(
+        joinedload(Listing.seller), joinedload(Listing.images)
+    )
     if status == "removed":
         query = query.filter(Listing.status == status, Listing.seller_id == user.id)
     else:
@@ -77,6 +101,8 @@ def list_listings(
         if listing_type not in LISTING_TYPES:
             raise HTTPException(status_code=400, detail="Invalid listing type")
         query = query.filter(Listing.listing_type == listing_type)
+    if seller_id is not None:
+        query = query.filter(Listing.seller_id == seller_id)
 
     listings = query.order_by(Listing.created_at.desc()).all()
 
@@ -97,7 +123,12 @@ def get_listing(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    listing = db.get(Listing, listing_id)
+    listing = (
+        db.query(Listing)
+        .options(joinedload(Listing.seller), joinedload(Listing.images))
+        .filter(Listing.id == listing_id)
+        .first()
+    )
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
     if listing.status == "removed" and listing.seller_id != user.id:
@@ -114,13 +145,63 @@ def create_listing(
 ):
     if payload.listing_type not in LISTING_TYPES:
         raise HTTPException(status_code=400, detail="Invalid listing type")
-    if payload.expires_in_days not in VALID_EXPIRY_DAYS:
+
+    expires_in_days = _resolve_expiry_days(payload)
+    if expires_in_days not in VALID_EXPIRY_DAYS:
         raise HTTPException(status_code=400, detail="expires_in_days must be 7, 14, or 30")
 
-    data = payload.model_dump(exclude={"expires_in_days"})
-    data["expires_at"] = datetime.utcnow() + timedelta(days=payload.expires_in_days)
+    data = payload.model_dump(exclude={"expiry_days", "expires_in_days"})
+    data["expires_at"] = datetime.utcnow() + timedelta(days=expires_in_days)
     listing = Listing(**data, seller_id=user.id)
     db.add(listing)
+    db.commit()
+    db.refresh(listing)
+    return listing
+
+
+@router.post("/{listing_id}/images", response_model=ListingImageOut)
+def upload_image(
+    listing_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if listing.seller_id != user.id:
+        raise HTTPException(status_code=403, detail="You can only upload images to your own listings")
+
+    ext = Path(file.filename or "image").suffix.lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    filename = f"{listing_id}_{timestamp}{ext}"
+    file_path = UPLOAD_DIR / filename
+    with open(file_path, "wb") as f:
+        f.write(file.file.read())
+
+    image_url = f"/uploads/{filename}"
+    image = ListingImage(listing_id=listing_id, url=image_url)
+    db.add(image)
+    db.commit()
+    db.refresh(image)
+    return image
+
+
+@router.post("/{listing_id}/sold", response_model=ListingOut)
+def mark_sold(
+    listing_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    _require_seller(listing, user)
+    listing.status = "sold"
+    listing.sold_at = datetime.utcnow()
     db.commit()
     db.refresh(listing)
     return listing
@@ -140,7 +221,9 @@ def patch_listing_status(
 
     if payload.status not in PATCHABLE_STATUSES:
         raise HTTPException(status_code=400, detail="Invalid status")
-    if payload.expires_in_days not in VALID_EXPIRY_DAYS:
+
+    expires_in_days = _resolve_expiry_days(payload)
+    if expires_in_days not in VALID_EXPIRY_DAYS:
         raise HTTPException(status_code=400, detail="expires_in_days must be 7, 14, or 30")
 
     _expire_listing_if_needed(listing, db)
@@ -151,7 +234,7 @@ def patch_listing_status(
     elif payload.status == "open":
         listing.status = "open"
         listing.sold_at = None
-        listing.expires_at = datetime.utcnow() + timedelta(days=payload.expires_in_days)
+        listing.expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
     elif payload.status == "removed":
         listing.status = "removed"
 
@@ -175,7 +258,7 @@ def renew_listing(
     if listing.status == "open":
         raise HTTPException(status_code=400, detail="Listing is already open")
 
-    expires_in_days = payload.expires_in_days if payload else 30
+    expires_in_days = _resolve_expiry_days(payload)
     if expires_in_days not in VALID_EXPIRY_DAYS:
         raise HTTPException(status_code=400, detail="expires_in_days must be 7, 14, or 30")
 
@@ -201,3 +284,37 @@ def delete_listing(
     listing.status = "removed"
     db.commit()
     return {"message": "Listing removed"}
+
+
+@router.get("/{listing_id}/comments", response_model=list[CommentOut])
+def list_comments(
+    listing_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    return (
+        db.query(Comment)
+        .options(joinedload(Comment.user))
+        .filter(Comment.listing_id == listing_id)
+        .order_by(Comment.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/{listing_id}/comments", response_model=CommentOut)
+def create_comment(
+    listing_id: int,
+    payload: CommentIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    listing = db.get(Listing, listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if listing.status != "open":
+        raise HTTPException(status_code=403, detail="This listing is no longer open for comments")
+    comment = Comment(text=payload.text.strip(), listing_id=listing_id, user_id=user.id)
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment

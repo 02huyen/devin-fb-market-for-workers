@@ -2,88 +2,125 @@ import os
 import uuid
 from unittest.mock import Mock
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import StaticPool, create_engine
+from sqlalchemy.orm import sessionmaker
 
-# Use an isolated test database and deterministic secrets/settings before any app imports.
-os.environ["APP_SECRET_KEY"] = "test-secret-not-for-production"
-os.environ["DATABASE_URL"] = "sqlite:///mercury_test.db"
+from app.auth_utils import create_session_token
+from app.database import Base, get_db
+from app.main import app
+from app.models import User
+from app.services.rate_limiter import rate_limiter
+
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["APP_SECRET_KEY"] = "test-secret"
+os.environ["APP_ENV"] = "dev"
 os.environ["FRONTEND_URL"] = "http://localhost:3000"
 
-# Remove a stale test DB so the app imports create a fresh schema.
-_test_db_path = "mercury_test.db"
-if os.path.exists(_test_db_path):
-    os.remove(_test_db_path)
 
-from app import database as db_module  # noqa: E402
-from app.auth_utils import create_session_token  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import User  # noqa: E402
+@pytest.fixture(scope="function")
+def test_engine():
+    """Create a fresh in-memory SQLite engine with a single shared connection."""
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    yield engine
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
-Base = db_module.Base
+
+@pytest.fixture(scope="function")
+def db(test_engine):
+    """Provide a fresh session bound to the test engine."""
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="function", autouse=True)
+def override_db(db):
+    """Override FastAPI's get_db dependency to use the test session."""
+    def _get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = _get_db
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="function", autouse=True)
+def mock_dns_resolver(monkeypatch):
+    """Avoid real DNS lookups by returning a fake MX record."""
+    monkeypatch.setattr(
+        "app.services.email_validation.dns.resolver.resolve",
+        lambda *args, **kwargs: [object()],
+    )
+
+
+@pytest.fixture(scope="function", autouse=True)
+def reset_rate_limiter():
+    """Reset the in-memory rate limiter between tests."""
+    rate_limiter._windows.clear()
+    yield
+
+
+@pytest.fixture(scope="function")
 def client():
-    """Provide a TestClient with a fresh test database schema."""
-    Base.metadata.drop_all(bind=db_module.engine)
-    Base.metadata.create_all(bind=db_module.engine)
-    with TestClient(app) as client:
-        yield client
-    Base.metadata.drop_all(bind=db_module.engine)
+    """Synchronous TestClient for tests that use regular def test_*."""
+    return TestClient(app)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def client2():
-    """Provide an additional TestClient that shares the test database."""
-    with TestClient(app) as client:
-        yield client
+    """Second synchronous TestClient for tests that need a second user."""
+    return TestClient(app)
 
 
-@pytest.fixture
-def user(client):
-    """Create a verified user, set the session cookie on the client, and return the user."""
-    db = db_module.SessionLocal()
-    try:
-        u = User(
-            email=f"test-{uuid.uuid4().hex[:8]}@example.com",
-            domain="example.com",
-            company_name="Example",
-            display_name="Test",
-            is_verified=True,
-        )
-        db.add(u)
-        db.commit()
-        db.refresh(u)
-        u.token = create_session_token(u.id)
-        client.cookies.set("wm_session", u.token)
-        yield u
-    finally:
-        db.close()
+@pytest.fixture(scope="function")
+def user(client, db):
+    """Create a verified user, set the session cookie, and return the user."""
+    u = User(
+        email=f"test-{uuid.uuid4().hex[:8]}@example.com",
+        domain="example.com",
+        company_name="Example",
+        display_name="Test",
+        is_verified=True,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    token = create_session_token(u.id)
+    client.cookies.set("wm_session", token)
+    u.token = token
+    return u
 
 
-@pytest.fixture
-def other_user(client):
-    """Create a second verified user and return it (without setting the client cookie)."""
-    db = db_module.SessionLocal()
-    try:
-        u = User(
-            email=f"other-{uuid.uuid4().hex[:8]}@example.com",
-            domain="example.com",
-            company_name="Other",
-            display_name="Other",
-            is_verified=True,
-        )
-        db.add(u)
-        db.commit()
-        db.refresh(u)
-        u.token = create_session_token(u.id)
-        yield u
-    finally:
-        db.close()
+@pytest.fixture(scope="function")
+def other_user(db):
+    """Create a second verified user and return it."""
+    u = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        domain="example.com",
+        company_name="Other",
+        display_name="Other",
+        is_verified=True,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    u.token = create_session_token(u.id)
+    return u
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def auth_user(client, monkeypatch):
     """Create a verified user via the auth flow and return the client and user."""
     monkeypatch.setattr(
@@ -98,3 +135,13 @@ def auth_user(client, monkeypatch):
     resp = client.post("/auth/verify", params={"token": token})
     assert resp.status_code == 200, resp.text
     return {"client": client, "user": resp.json()}
+
+
+@pytest.fixture(scope="function")
+async def async_client():
+    """Async HTTP client backed by the FastAPI app for async test_*."""
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        base_url="http://test",
+    ) as c:
+        yield c

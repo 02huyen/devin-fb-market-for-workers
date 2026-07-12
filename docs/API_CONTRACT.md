@@ -1,33 +1,97 @@
-# Workplace Market — API Contract
+# Workplace Market API Contract
 
-This document defines the request/response shapes for the Workplace Market backend. All authenticated endpoints require a valid `wm_session` cookie returned by the auth flow.
+This document is the source of truth for the HTTP interface between the frontend
+and backend. All authenticated endpoints require a valid `wm_session` cookie
+returned by the auth flow.
 
 ## Auth
 
+All auth endpoints live under `/auth`.
+
 ### `POST /auth/request-link`
 
-Request a magic sign-in link for a work email.
+Request a magic sign-in link sent to the user's work email.
 
-**Request body:**
-```json
-{
-  "email": "user@company.com"
-}
-```
+- **Request body:**
+  ```json
+  {
+    "email": "user@company.com"
+  }
+  ```
 
-**Response body:**
-```json
-{
-  "message": "Check your work email for a sign-in link.",
-  "dev_magic_link": "http://localhost:3000/verify?token=..."  // dev mode only
-}
-```
+- **Success (200):**
+  ```json
+  {
+    "message": "Check your work email for a sign-in link.",
+    "dev_magic_link": "http://localhost:3000/verify?token=..."
+  }
+  ```
+  In `APP_ENV=dev` with no email provider configured, `dev_magic_link` contains
+  the inline sign-in link so the flow can be tested without an email provider.
 
-### `POST /auth/verify?token=<token>`
+- **Errors:**
+  - `400` — Invalid email or non-work email (free/disposable provider or no MX records).
+  - `429` — Rate limit exceeded (per email or per IP).
+  - `502` — Production email provider failed to send the message.
 
-Verify the magic link and create the session cookie.
+### `POST /auth/verify`
 
-**Response body:** `UserOut`
+Verify a magic link token and establish a session cookie.
+
+- **Query parameter:** `token` (string)
+
+- **Success (200):** Returns the authenticated `User` object and sets the
+  `wm_session` session cookie.
+  ```json
+  {
+    "id": 1,
+    "email": "user@company.com",
+    "domain": "company.com",
+    "company_name": "Company",
+    "display_name": "User",
+    "is_verified": true
+  }
+  ```
+
+- **Errors:**
+  - `400` — Invalid, expired, or already-used token.
+
+### `GET /auth/me`
+
+Return the currently authenticated user.
+
+- **Success (200):** Returns the `User` object.
+- **Errors:**
+  - `401` — Missing or invalid session cookie.
+
+### `PATCH /auth/me`
+
+Update the authenticated user's display name.
+
+- **Request body:**
+  ```json
+  {
+    "display_name": "New Name"
+  }
+  ```
+
+- **Success (200):** Returns the updated `User` object.
+
+### `POST /auth/logout`
+
+Clear the session cookie.
+
+- **Success (200):**
+  ```json
+  {
+    "message": "Logged out"
+  }
+  ```
+
+## Common types
+
+### `User`
+
 ```json
 {
   "id": 1,
@@ -36,23 +100,6 @@ Verify the magic link and create the session cookie.
   "company_name": "Company",
   "display_name": "User",
   "is_verified": true
-}
-```
-
-### `GET /auth/me`
-
-Return the current authenticated user.
-
-**Response body:** `UserOut`
-
-### `POST /auth/logout`
-
-Clear the session cookie.
-
-**Response body:**
-```json
-{
-  "message": "Logged out"
 }
 ```
 
@@ -78,6 +125,7 @@ List listings. Defaults to `status=open` (active, non-expired listings).
 - `status` — `open`, `sold`, `expired`, or `removed`. Default: `open`. `removed` is restricted to the seller's own listings.
 - `lat`, `lng` — center for radius filtering.
 - `radius_miles` — default `50.0`.
+- `seller_id` — filter by a specific seller.
 
 **Response body:** `ListingOut[]`
 
@@ -103,7 +151,8 @@ List listings. Defaults to `status=open` (active, non-expired listings).
       "domain": "company.com",
       "company_name": "Company",
       "display_name": "User"
-    }
+    },
+    "images": []
   }
 ]
 ```
@@ -129,7 +178,7 @@ Create a new listing.
 }
 ```
 
-`expires_in_days` must be `7`, `14`, or `30` (default `30`). The listing is created with `status=open` and `expires_at = now + expires_in_days`.
+`expires_in_days` (or `expiry_days` for frontend compatibility) must be `7`, `14`, or `30` (default `30`). The listing is created with `status=open` and `expires_at = now + expires_in_days`.
 
 **Response body:** `ListingOut`
 
@@ -140,6 +189,12 @@ Get a single listing.
 **Response body:** `ListingOut`
 
 Removed listings are only returned to the seller.
+
+### `POST /listings/{id}/sold`
+
+Mark a listing as sold. Seller-only.
+
+**Response body:** `ListingOut`
 
 ### `PATCH /listings/{id}/status`
 
@@ -192,5 +247,82 @@ Soft-delete a listing (sets `status=removed`). Seller-only.
 ```json
 {
   "message": "Listing removed"
+}
+```
+
+### `POST /listings/{id}/images`
+
+Upload an image for a listing. Seller-only.
+
+- **Request body:** multipart/form-data with `file`.
+- **Success (200):** `ListingImageOut`
+- **Errors:**
+  - `400` — Unsupported image type.
+  - `403` — Only the seller can upload images.
+
+### `GET /listings/{id}/comments`
+
+List comments for a listing.
+
+**Response body:** `CommentOut[]`
+
+### `POST /listings/{id}/comments`
+
+Create a comment on a listing. Only allowed while the listing is `open`.
+
+**Request body:**
+```json
+{
+  "text": "Is this still available?"
+}
+```
+
+**Response body:** `CommentOut`
+
+## Messages
+
+### `GET /messages/conversations`
+
+List the authenticated user's conversations.
+
+**Response body:** `ConversationOut[]`
+
+### `POST /messages/conversations`
+
+Start a conversation about a listing.
+
+- **Query parameter:** `listing_id` (int)
+- **Success (200):** `ConversationOut`
+- **Errors:**
+  - `400` — Cannot message yourself.
+  - `404` — Listing not found.
+
+### `GET /messages/conversations/{id}/messages`
+
+Get messages for a conversation.
+
+**Response body:** `MessageOut[]`
+
+### `POST /messages/conversations/{id}/messages`
+
+Send a message in a conversation.
+
+**Request body:**
+```json
+{
+  "text": "Hello, is this still available?"
+}
+```
+
+**Response body:** `MessageOut`
+
+### `POST /messages/conversations/{id}/read`
+
+Mark all messages from the other participant as read.
+
+**Response body:**
+```json
+{
+  "message": "Marked as read"
 }
 ```

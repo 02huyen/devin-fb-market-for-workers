@@ -15,6 +15,11 @@ import os
 import dns.resolver
 import httpx
 
+try:
+    from disposable_email_domains import blocklist
+except ImportError:  # pragma: no cover - package not installed in minimal envs
+    blocklist = set()
+
 FREE_EMAIL_DOMAINS = {
     "gmail.com", "yahoo.com", "yahoo.co.uk", "hotmail.com", "outlook.com",
     "live.com", "msn.com", "aol.com", "icloud.com", "me.com", "mac.com",
@@ -43,12 +48,26 @@ def extract_domain(email: str) -> str:
     return email.rsplit("@", 1)[-1].lower().strip()
 
 
+def _is_disposable_domain(domain: str) -> bool:
+    if domain in DISPOSABLE_EMAIL_DOMAINS:
+        return True
+    if domain in blocklist:
+        return True
+    # Check parent domains in case the disposable entry is the root and the
+    # address uses a subdomain (e.g. foo.yopmail.com -> yopmail.com).
+    parts = domain.split(".")
+    for i in range(1, len(parts)):
+        if ".".join(parts[i:]) in blocklist:
+            return True
+    return False
+
+
 def check_work_domain(domain: str) -> None:
     if domain in FREE_EMAIL_DOMAINS:
         raise EmailValidationError(
             "Personal email providers are not allowed. Please use your work email."
         )
-    if domain in DISPOSABLE_EMAIL_DOMAINS:
+    if _is_disposable_domain(domain):
         raise EmailValidationError(
             "Disposable email addresses are not allowed. Please use your work email."
         )

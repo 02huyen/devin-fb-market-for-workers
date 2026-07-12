@@ -2,11 +2,10 @@ import uuid
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
-from app import database as db_module
 from app.models import Listing
 
 
-def _create_listing(client, **overrides):
+def _create_listing(client, *args, **overrides):
     payload = {
         "title": "Test item",
         "description": "A test item",
@@ -17,6 +16,8 @@ def _create_listing(client, **overrides):
         "longitude": -97.7431,
         "expires_in_days": 7,
     }
+    if args and isinstance(args[0], dict):
+        payload.update(args[0])
     payload.update(overrides)
     return client.post("/listings", json=payload)
 
@@ -105,15 +106,11 @@ def test_renew_sold_listing(user, client):
     assert expires_at > datetime.utcnow() + timedelta(days=13)
 
 
-def test_expired_listing_hidden_and_filterable(user, client):
+def test_expired_listing_hidden_and_filterable(user, client, db):
     created = _create_listing(client).json()
-    db = db_module.SessionLocal()
-    try:
-        listing = db.get(Listing, created["id"])
-        listing.expires_at = datetime.utcnow() - timedelta(seconds=1)
-        db.commit()
-    finally:
-        db.close()
+    listing = db.get(Listing, created["id"])
+    listing.expires_at = datetime.utcnow() - timedelta(seconds=1)
+    db.commit()
 
     assert client.get("/listings").json() == []
 
@@ -244,6 +241,8 @@ def test_create_and_list_listings(client, auth_user):
     ).json()
     assert listing["title"] == title
     assert listing["seller"]["email"] == auth_user["user"]["email"]
+    assert listing["status"] == "open"
+    assert listing["expires_at"] is not None
 
     resp = auth_user["client"].get("/listings", params={"q": title})
     assert resp.status_code == 200
@@ -280,6 +279,35 @@ def test_listing_type_filter(client, auth_user, monkeypatch):
     results = resp.json()
     assert any(item["title"] == title_sell for item in results)
     assert not any(item["title"] == title_buy for item in results)
+
+
+def test_status_filter(client, auth_user, monkeypatch):
+    title = f"status-{uuid.uuid4().hex[:8]}"
+    listing = _create_listing(
+        auth_user["client"],
+        title=title,
+        description="",
+        listing_type="sell",
+        price=1.0,
+        location_name="",
+        latitude=None,
+        longitude=None,
+    ).json()
+
+    resp = auth_user["client"].get("/listings", params={"status": "open"})
+    assert resp.status_code == 200
+    assert any(item["title"] == title for item in resp.json())
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/sold")
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].get("/listings", params={"status": "open"})
+    assert resp.status_code == 200
+    assert not any(item["title"] == title for item in resp.json())
+
+    resp = auth_user["client"].get("/listings", params={"status": "sold"})
+    assert resp.status_code == 200
+    assert any(item["title"] == title for item in resp.json())
 
 
 def test_radius_filter(client, auth_user, monkeypatch):
@@ -340,4 +368,27 @@ def test_only_owner_can_delete(client, client2, auth_user, monkeypatch):
 
     _login(client2, monkeypatch, f"other-{uuid.uuid4()}@example.com")
     resp = client2.delete(f"/listings/{listing['id']}")
+    assert resp.status_code == 403
+
+
+def test_comments_read_only_when_closed(client, auth_user, monkeypatch):
+    title = f"comment-{uuid.uuid4().hex[:8]}"
+    listing = _create_listing(
+        auth_user["client"],
+        title=title,
+        description="",
+        listing_type="sell",
+        price=1.0,
+        location_name="",
+        latitude=None,
+        longitude=None,
+    ).json()
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/comments", json={"text": "Is this still available?"})
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/sold")
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/comments", json={"text": "Another comment"})
     assert resp.status_code == 403
