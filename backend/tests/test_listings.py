@@ -36,6 +36,8 @@ def test_create_and_list_listings(client, auth_user, monkeypatch):
     listing = _create_listing(auth_user["client"], payload)
     assert listing["title"] == title
     assert listing["seller"]["email"] == auth_user["user"]["email"]
+    assert listing["status"] == "open"
+    assert listing["expires_at"] is not None
 
     resp = auth_user["client"].get("/listings", params={"q": title})
     assert resp.status_code == 200
@@ -70,6 +72,34 @@ def test_listing_type_filter(client, auth_user, monkeypatch):
     results = resp.json()
     assert any(item["title"] == title_sell for item in results)
     assert not any(item["title"] == title_buy for item in results)
+
+
+def test_status_filter(client, auth_user, monkeypatch):
+    title = f"status-{uuid.uuid4().hex[:8]}"
+    listing = _create_listing(auth_user["client"], {
+        "title": title,
+        "description": "",
+        "listing_type": "sell",
+        "price": 1.0,
+        "location_name": "",
+        "latitude": None,
+        "longitude": None,
+    })
+
+    resp = auth_user["client"].get("/listings", params={"status": "open"})
+    assert resp.status_code == 200
+    assert any(item["title"] == title for item in resp.json())
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/sold")
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].get("/listings", params={"status": "open"})
+    assert resp.status_code == 200
+    assert not any(item["title"] == title for item in resp.json())
+
+    resp = auth_user["client"].get("/listings", params={"status": "sold"})
+    assert resp.status_code == 200
+    assert any(item["title"] == title for item in resp.json())
 
 
 def test_radius_filter(client, auth_user, monkeypatch):
@@ -127,4 +157,26 @@ def test_only_owner_can_delete(client, client2, auth_user, monkeypatch):
 
     _login(client2, monkeypatch, f"other-{uuid.uuid4()}@example.com")
     resp = client2.delete(f"/listings/{listing['id']}")
+    assert resp.status_code == 403
+
+
+def test_comments_read_only_when_closed(client, auth_user, monkeypatch):
+    title = f"comment-{uuid.uuid4().hex[:8]}"
+    listing = _create_listing(auth_user["client"], {
+        "title": title,
+        "description": "",
+        "listing_type": "sell",
+        "price": 1.0,
+        "location_name": "",
+        "latitude": None,
+        "longitude": None,
+    })
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/comments", json={"text": "Is this still available?"})
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/sold")
+    assert resp.status_code == 200
+
+    resp = auth_user["client"].post(f"/listings/{listing['id']}/comments", json={"text": "Another comment"})
     assert resp.status_code == 403

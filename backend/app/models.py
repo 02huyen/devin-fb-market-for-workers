@@ -18,6 +18,8 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     listings: Mapped[list["Listing"]] = relationship(back_populates="seller")
+    comments: Mapped[list["Comment"]] = relationship(back_populates="user")
+    sent_messages: Mapped[list["Message"]] = relationship(back_populates="sender")
 
 
 class MagicLinkToken(Base):
@@ -42,10 +44,39 @@ class Listing(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | sold | expired
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     seller: Mapped[User] = relationship(back_populates="listings")
+    images: Mapped[list["ListingImage"]] = relationship(back_populates="listing", cascade="all, delete-orphan")
+    comments: Mapped[list["Comment"]] = relationship(back_populates="listing", cascade="all, delete-orphan")
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="listing", cascade="all, delete-orphan")
+
+
+class ListingImage(Base):
+    __tablename__ = "listing_images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"))
+    url: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    listing: Mapped[Listing] = relationship(back_populates="images")
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    listing: Mapped[Listing] = relationship(back_populates="comments")
+    user: Mapped[User] = relationship(back_populates="comments")
 
 
 class Conversation(Base):
@@ -57,16 +88,14 @@ class Conversation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
 
-    listing: Mapped[Listing] = relationship("Listing", foreign_keys=[listing_id])
+    listing: Mapped[Listing] = relationship(back_populates="conversations")
     buyer: Mapped[User] = relationship("User", foreign_keys=[buyer_id])
-    messages: Mapped[list["Message"]] = relationship(
-        "Message", back_populates="conversation", order_by="Message.created_at.desc()"
-    )
+    seller: Mapped[User] = relationship("User", foreign_keys=[seller_id])
+    messages: Mapped[list["Message"]] = relationship(back_populates="conversation", cascade="all, delete-orphan")
 
 
 class Message(Base):
@@ -75,11 +104,9 @@ class Message(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    body: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    text: Mapped[str] = mapped_column(Text)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    conversation: Mapped[Conversation] = relationship(
-        "Conversation", back_populates="messages", foreign_keys=[conversation_id]
-    )
-    sender: Mapped[User] = relationship("User", foreign_keys=[sender_id])
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")
+    sender: Mapped[User] = relationship(back_populates="sent_messages")

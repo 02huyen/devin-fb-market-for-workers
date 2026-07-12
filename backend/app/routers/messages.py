@@ -13,8 +13,7 @@ router = APIRouter(tags=["messages"])
 
 
 def _participant_check(conversation: Conversation, user: User) -> None:
-    seller_id = conversation.listing.seller_id if conversation.listing else None
-    if conversation.buyer_id != user.id and seller_id != user.id:
+    if conversation.buyer_id != user.id and conversation.seller_id != user.id:
         raise HTTPException(
             status_code=403,
             detail="Only the buyer and the listing seller can access this conversation",
@@ -25,9 +24,7 @@ def _build_conversation(
     db: Session, conversation: Conversation, user: User
 ) -> ConversationOut:
     listing = conversation.listing
-    seller = listing.seller
-    buyer = conversation.buyer
-    other = seller if user.id == conversation.buyer_id else buyer
+    other = conversation.seller if user.id == conversation.buyer_id else conversation.buyer
 
     if user.id == conversation.buyer_id:
         unread_count = (
@@ -35,7 +32,7 @@ def _build_conversation(
             .filter(
                 Message.conversation_id == conversation.id,
                 Message.read_at.is_(None),
-                Message.sender_id == seller.id,
+                Message.sender_id == conversation.seller_id,
             )
             .count()
         )
@@ -45,7 +42,7 @@ def _build_conversation(
             .filter(
                 Message.conversation_id == conversation.id,
                 Message.read_at.is_(None),
-                Message.sender_id == buyer.id,
+                Message.sender_id == conversation.buyer_id,
             )
             .count()
         )
@@ -102,16 +99,20 @@ def start_conversation(
         .first()
     )
     if not conversation:
-        conversation = Conversation(listing_id=listing_id, buyer_id=user.id)
+        conversation = Conversation(
+            listing_id=listing_id,
+            buyer_id=user.id,
+            seller_id=listing.seller_id,
+        )
         db.add(conversation)
         db.commit()
         db.refresh(conversation)
 
-    if payload.body:
+    if payload.text:
         message = Message(
             conversation_id=conversation.id,
             sender_id=user.id,
-            body=payload.body,
+            text=payload.text,
         )
         db.add(message)
         conversation.updated_at = datetime.utcnow()
@@ -123,6 +124,7 @@ def start_conversation(
         db.query(Conversation)
         .options(joinedload(Conversation.listing).joinedload(Listing.seller))
         .options(joinedload(Conversation.buyer))
+        .options(joinedload(Conversation.seller))
         .filter(Conversation.id == conversation.id)
         .first()
     )
@@ -136,15 +138,15 @@ def get_conversations(
 ):
     conversations = (
         db.query(Conversation)
-        .join(Conversation.listing)
         .filter(
             or_(
                 Conversation.buyer_id == user.id,
-                Listing.seller_id == user.id,
+                Conversation.seller_id == user.id,
             )
         )
         .options(joinedload(Conversation.listing).joinedload(Listing.seller))
         .options(joinedload(Conversation.buyer))
+        .options(joinedload(Conversation.seller))
         .order_by(Conversation.updated_at.desc())
         .all()
     )
@@ -206,7 +208,7 @@ def create_message(
     message = Message(
         conversation_id=conversation_id,
         sender_id=user.id,
-        body=payload.body,
+        text=payload.text,
     )
     db.add(message)
     conversation.updated_at = datetime.utcnow()
