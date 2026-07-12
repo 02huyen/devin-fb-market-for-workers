@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -81,11 +81,14 @@ class Comment(Base):
 
 class Conversation(Base):
     __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "buyer_id", name="uq_conversation_listing_buyer"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"))
-    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    seller_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
@@ -99,8 +102,8 @@ class Message(Base):
     __tablename__ = "messages"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"))
-    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     text: Mapped[str] = mapped_column(Text)
     read_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
