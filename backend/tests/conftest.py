@@ -1,7 +1,9 @@
 import os
 import uuid
+from unittest.mock import Mock
 
 import pytest
+from fastapi.testclient import TestClient
 
 # Use an isolated test database and deterministic secrets/settings before any app imports.
 os.environ["APP_SECRET_KEY"] = "test-secret-not-for-production"
@@ -17,7 +19,6 @@ from app import database as db_module  # noqa: E402
 from app.auth_utils import create_session_token  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import User  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
 
 Base = db_module.Base
 
@@ -30,6 +31,13 @@ def client():
     with TestClient(app) as client:
         yield client
     Base.metadata.drop_all(bind=db_module.engine)
+
+
+@pytest.fixture
+def client2():
+    """Provide an additional TestClient that shares the test database."""
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture
@@ -73,3 +81,20 @@ def other_user(client):
         yield u
     finally:
         db.close()
+
+
+@pytest.fixture
+def auth_user(client, monkeypatch):
+    """Create a verified user via the auth flow and return the client and user."""
+    monkeypatch.setattr(
+        "app.services.email_validation.dns.resolver.resolve",
+        lambda *args, **kwargs: [Mock()],
+    )
+    email = f"test-{uuid.uuid4()}@example.com"
+    resp = client.post("/auth/request-link", json={"email": email})
+    assert resp.status_code == 200, resp.text
+    link = resp.json()["dev_magic_link"]
+    token = link.split("token=")[1]
+    resp = client.post("/auth/verify", params={"token": token})
+    assert resp.status_code == 200, resp.text
+    return {"client": client, "user": resp.json()}
