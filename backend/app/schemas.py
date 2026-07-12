@@ -59,6 +59,22 @@ class CommentOut(BaseModel):
     user: UserOut
 
 
+class ConversationParticipantOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
+class ListingSnippetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    listing_type: str
+
+
 class MessageIn(BaseModel):
     text: str
 
@@ -67,10 +83,16 @@ class MessageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    conversation_id: int
+    sender_id: int
     text: str
-    read_at: datetime | None
     created_at: datetime
-    sender: UserOut
+    read_at: datetime | None
+    sender: ConversationParticipantOut
+
+
+class ConversationIn(BaseModel):
+    text: str | None = None
 
 
 class ConversationOut(BaseModel):
@@ -78,11 +100,13 @@ class ConversationOut(BaseModel):
 
     id: int
     listing_id: int
-    buyer: UserOut
-    seller: UserOut
-    updated_at: datetime
+    buyer_id: int
+    listing: ListingSnippetOut
+    other_participant: ConversationParticipantOut
+    unread_count: int
     created_at: datetime
-    unread_count: int = 0
+    updated_at: datetime
+    last_message: MessageOut | None
 
 
 class ListingIn(BaseModel):
