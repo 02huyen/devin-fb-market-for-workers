@@ -55,5 +55,8 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Test
+        run: npm run test -- --watchAll=false
+
       - name: Build
         run: npm run build

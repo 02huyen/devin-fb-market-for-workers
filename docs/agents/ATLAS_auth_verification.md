@@ -12,7 +12,7 @@ Key files you own:
 Make authentication production-ready:
 1. **Real email delivery**: integrate Resend (or SendGrid) to send the magic link. Keep the current dev-mode inline link behind `APP_ENV=dev`.
 2. **Company enrichment**: finish the Abstract API (or Hunter.io) integration in `lookup_company_name` using `EMAIL_VERIFY_API_KEY`; store the verified company name on the user.
-3. **Hardening**: rate-limit `/auth/request-link` (per email + per IP), single-use short-lived tokens (already there — verify), secure cookie flags in production, expand the disposable-domain list (consider the `disposable-email-domains` package).
+3. **Hardening**: rate-limit `/auth/request-link` (per email + per IP), single-use short-lived tokens, secure cookie flags in production, and keep the disposable-domain list current (the `disposable-email-domains` package is already available).
 
 ## Rules
 - Only edit files under `backend/app/routers/auth.py`, `backend/app/services/`, `backend/app/auth_utils.py`, and new files under those paths. If you need model/schema changes, propose them in your PR description — `models.py`/`schemas.py` are owned by Mercury.
@@ -20,3 +20,4 @@ Make authentication production-ready:
 - One feature branch, one PR. Do not push to `main`.
 - Keep `POST /auth/request-link`, `POST /auth/verify`, `GET /auth/me`, `POST /auth/logout` contracts backward compatible — the frontend depends on them.
 - Add/keep the endpoints documented in `docs/API_CONTRACT.md` via PR if you change anything.
+- See `docs/AGENT_ONBOARDING.md` for the current project overview.

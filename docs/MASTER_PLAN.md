@@ -4,16 +4,20 @@ A trusted, scam-free marketplace where every user is verified via their **work e
 
 ## 1. Current state (already built in this repo)
 
-A working MVP scaffold:
+A working MVP with auth, marketplace, and messaging:
 
-- `backend/` — FastAPI + SQLAlchemy (SQLite for dev)
+- `backend/` — FastAPI + SQLAlchemy (SQLite for dev, Postgres via `DATABASE_URL`)
   - Magic-link login: `POST /auth/request-link` → `POST /auth/verify` → session cookie
   - Work-email validation: free/disposable-provider blocklist + DNS MX check + optional company-enrichment API hook (`EMAIL_VERIFY_API_KEY`)
   - Verified users stored in `users` table with `domain` + `company_name`
-  - Listings API: create / list / soft-delete, keyword search, type filter (sell/buy/giveaway), lat/lng + radius filter (haversine)
+  - Listings API: create / list / soft-delete, keyword search, type filter (sell/buy/giveaway), lat/lng + radius filter (haversine), `status` lifecycle (`open`/`sold`/`expired`/`removed`) + `renew` endpoint
+  - Messaging API: per-listing conversations (`/messages/conversations`) with unread counts and messages
 - `frontend/` — Next.js 14 (App Router) + TypeScript + Tailwind
-  - Login page (`/`), verification page (`/verify`), marketplace (`/market`) with search, filters, geolocation radius, and listing creation
-- `docs/agents/` — one brief per agent (send each file to its agent)
+  - Login page (`/`), verification page (`/verify`), marketplace (`/market`) with search, filters, geolocation radius, listing creation, listing lifecycle actions, and detail page
+  - Profile (`/profile`) for managing display name and listings
+  - Inbox (`/messages`) and conversation thread (`/messages/[id]`) for buyer↔seller DMs
+- `docs/API_CONTRACT.md` is the source of truth for the backend↔frontend interface.
+- `docs/agents/` — historical agent briefs; use them as context, but the current codebase and `API_CONTRACT.md` are the source of truth.
 
 ## 2. Email verification strategy (the plan)
 

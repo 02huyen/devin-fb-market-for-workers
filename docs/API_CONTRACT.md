@@ -171,7 +171,7 @@ List listings. Defaults to `status=open` (active, non-expired listings).
 
 - `q` — keyword search across `title` and `description`.
 - `listing_type` — `sell`, `buy`, or `giveaway`.
-- `status` — `open`, `sold`, `expired`, or `removed`. Default: `open`. `removed` is restricted to the seller's own listings.
+- `status` — `open`, `sold`, `expired`, `removed`, or `all`. Default: `open`. `removed` is restricted to the seller's own listings; `all` shows every non-removed listing plus the current seller's own removed listings.
 - `lat`, `lng` — center for radius filtering.
 - `radius_miles` — default `50.0`.
 - `seller_id` — filter by a specific seller.
@@ -309,102 +309,94 @@ Upload an image for a listing. Seller-only.
   - `400` — Unsupported image type.
   - `403` — Only the seller can upload images.
 
-## DMs (private buyer↔seller conversations)
+## Messages
 
-### `POST /listings/{id}/conversations`
+### Common types
 
-Start a new conversation thread for the authenticated buyer about a listing, or
-return an existing one keyed on `(listing_id, buyer_id)`. An optional `text` in
-the request creates the first message in the same call.
-
-**Request body (optional):**
-```json
-{
-  "text": "Is this still available?"
-}
-```
-
-**Response:** `ConversationOut`
+#### `ConversationOut`
 
 ```json
 {
   "id": 1,
-  "listing_id": 5,
+  "listing_id": 1,
   "buyer_id": 2,
-  "listing": { "id": 5, "title": "Standing desk", "listing_type": "sell" },
-  "other_participant": { "id": 3, "display_name": "Alice", "company_name": "Acme" },
+  "listing": {
+    "id": 1,
+    "title": "Desk chair",
+    "listing_type": "sell"
+  },
+  "other_participant": {
+    "id": 1,
+    "display_name": "Seller",
+    "company_name": "Company"
+  },
   "unread_count": 0,
-  "created_at": "2026-07-12T15:00:00",
-  "updated_at": "2026-07-12T15:00:00",
+  "created_at": "2026-07-12T15:55:07.704476",
+  "updated_at": "2026-07-12T15:55:07.704476",
   "last_message": null
 }
 ```
 
-A seller cannot start a conversation about their own listing.
-
----
-
-### `GET /conversations`
-
-Return the authenticated user's inbox — all conversations where they are the
-buyer or the listing seller. Sorted by `updated_at` descending.
-
-**Response:** `list[ConversationOut]`
-
-`unread_count` is the number of messages sent by the other participant that
-have not yet been marked as read.
-
----
-
-### `GET /conversations/{id}/messages`
-
-Return all messages in a conversation, oldest first. Also marks any unread
-messages from the other participant as read.
-
-**Response:** `list[MessageOut]`
+#### `MessageOut`
 
 ```json
-[
-  {
-    "id": 1,
-    "conversation_id": 1,
-    "sender_id": 2,
-    "text": "Is this still available?",
-    "created_at": "2026-07-12T15:00:00",
-    "read_at": "2026-07-12T15:05:00",
-    "sender": { "id": 2, "display_name": "Bob", "company_name": "Acme" }
+{
+  "id": 1,
+  "conversation_id": 1,
+  "sender_id": 2,
+  "text": "Hello, is this still available?",
+  "created_at": "2026-07-12T15:55:07.704476",
+  "read_at": null,
+  "sender": {
+    "id": 2,
+    "display_name": "Buyer",
+    "company_name": "Company"
   }
-]
+}
 ```
 
----
+### `GET /messages/conversations`
 
-### `POST /conversations/{id}/messages`
+List the authenticated user's conversations.
 
-Send a new message in the conversation. Only the buyer and the listing seller
-can access or post to a conversation.
+**Response body:** `ConversationOut[]`
+
+### `POST /messages/conversations`
+
+Start a conversation about a listing.
+
+- **Query parameter:** `listing_id` (int)
+- **Success (201):** `ConversationOut`
+- **Errors:**
+  - `400` — Cannot message yourself.
+  - `404` — Listing not found.
+
+### `GET /messages/conversations/{id}/messages`
+
+Get messages for a conversation.
+
+**Response body:** `MessageOut[]`
+
+### `POST /messages/conversations/{id}/messages`
+
+Send a message in a conversation.
 
 **Request body:**
 ```json
 {
-  "text": "Yes, it's still available."
+  "text": "Hello, is this still available?"
 }
 ```
 
-**Response:** `MessageOut`
+**Response body:** `MessageOut`
 
----
+### `POST /messages/conversations/{id}/read`
 
-## Real-time upgrade path (MVP)
+Mark all messages from the other participant as read.
 
-The MVP uses polling: the client refetches `GET /conversations` and
-`GET /conversations/{id}/messages` on a cadence. A future real-time layer can be
-added without changing these route signatures:
-
-- Add a WebSocket endpoint such as `/ws/conversations` protected by the same
-  `wm_session` cookie.
-- On `connect`, join rooms for each conversation the user participates in.
-- Broadcast new messages to the room and update `unread_count` in memory or via
-  the same DB queries.
-- Keep the REST endpoints as the source of truth for message history and read
-  receipts.
+**Response body:**
+```json
+{
+  "message": "Marked as read"
+}
+```

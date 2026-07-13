@@ -15,12 +15,14 @@ const STATUS_LABELS: Record<string, string> = {
   open: "Open",
   sold: "Sold",
   expired: "Expired",
+  removed: "Removed",
 };
 
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-800",
   sold: "bg-slate-200 text-slate-700",
   expired: "bg-red-100 text-red-800",
+  removed: "bg-slate-300 text-slate-700",
 };
 
 export default function ProfilePage() {
@@ -36,7 +38,7 @@ export default function ProfilePage() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const data = await getListings({ seller_id: user.id, status: "" });
+      const data = await getListings({ seller_id: user.id, status: "all" });
       setListings(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load listings");
@@ -199,7 +201,7 @@ export default function ProfilePage() {
                         Mark as sold
                       </button>
                     )}
-                    {(item.status === "sold" || item.status === "expired") && (
+                    {(item.status === "sold" || item.status === "expired" || item.status === "removed") && (
                       <button
                         onClick={() => onRenew(item.id)}
                         className="text-blue-600 hover:underline"
