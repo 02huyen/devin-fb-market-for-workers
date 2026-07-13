@@ -117,7 +117,8 @@ class ListingIn(BaseModel):
     location_name: str = ""
     latitude: float | None = None
     longitude: float | None = None
-    expiry_days: int | None = 7
+    expiry_days: int | None = None  # for frontend compatibility
+    expires_in_days: int | None = None  # default 7 | 14 | 30
 
 
 class ListingOut(BaseModel):
@@ -131,9 +132,21 @@ class ListingOut(BaseModel):
     location_name: str
     latitude: float | None
     longitude: float | None
+    status: str  # open | sold | expired | removed
+    expires_at: datetime
+    sold_at: datetime | None
     is_active: bool
-    status: str
-    expires_at: datetime | None
     created_at: datetime
     seller: SellerOut
     images: list[ListingImageOut] = []
+
+
+class ListingStatusPatchIn(BaseModel):
+    status: str  # open | sold | removed
+    expires_in_days: int | None = None
+    expiry_days: int | None = None
+
+
+class RenewIn(BaseModel):
+    expires_in_days: int | None = None
+    expiry_days: int | None = None
