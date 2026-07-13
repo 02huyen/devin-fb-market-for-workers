@@ -79,13 +79,18 @@ class Comment(Base):
     __tablename__ = "comments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    listing_id: Mapped[int] = mapped_column(ForeignKey("listings.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     text: Mapped[str] = mapped_column(Text)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    listing: Mapped[Listing] = relationship(back_populates="comments")
-    user: Mapped[User] = relationship(back_populates="comments")
+    listing: Mapped[Listing] = relationship("Listing", foreign_keys=[listing_id], back_populates="comments")
+    user: Mapped[User] = relationship("User", foreign_keys=[author_id], back_populates="comments")
+
+    @property
+    def author(self) -> User:
+        return self.user
 
 
 class Conversation(Base):

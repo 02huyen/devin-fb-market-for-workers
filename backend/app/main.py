@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .database import setup_database
-from .routers import auth, listings, messages
+from .routers import auth, comments, listings, messages
 
 setup_database()
 
@@ -25,6 +25,7 @@ upload_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=upload_dir), name="uploads")
 
 app.include_router(auth.router)
+app.include_router(comments.router)
 app.include_router(listings.router)
 app.include_router(messages.router)
 

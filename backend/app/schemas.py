@@ -46,6 +46,14 @@ class ListingImageOut(BaseModel):
     created_at: datetime
 
 
+class CommentAuthorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    display_name: str
+    company_name: str
+
+
 class CommentIn(BaseModel):
     text: str
 
@@ -54,9 +62,12 @@ class CommentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    listing_id: int
+    author_id: int
     text: str
+    is_deleted: bool
     created_at: datetime
-    user: UserOut
+    author: CommentAuthorOut
 
 
 class ConversationParticipantOut(BaseModel):

@@ -103,6 +103,55 @@ Clear the session cookie.
 }
 ```
 
+## Comments
+
+### `GET /listings/{id}/comments`
+
+Return all non-deleted comments on a listing, oldest first.
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "listing_id": 1,
+    "author_id": 2,
+    "text": "Is this still available?",
+    "is_deleted": false,
+    "created_at": "2026-07-12T15:00:00",
+    "author": {
+      "id": 2,
+      "display_name": "Jane",
+      "company_name": "Acme"
+    }
+  }
+]
+```
+
+### `POST /listings/{id}/comments`
+
+Create a comment on a listing. The listing must be `open`.
+
+**Body:**
+```json
+{
+  "text": "Is this still available?"
+}
+```
+
+**Response:** `CommentOut`
+
+### `DELETE /comments/{id}`
+
+Soft-delete a comment. Only the comment author or the listing owner may delete.
+
+**Response:**
+```json
+{
+  "message": "Comment removed"
+}
+```
+
 ## Listings
 
 Status values:
@@ -259,25 +308,6 @@ Upload an image for a listing. Seller-only.
 - **Errors:**
   - `400` — Unsupported image type.
   - `403` — Only the seller can upload images.
-
-### `GET /listings/{id}/comments`
-
-List comments for a listing.
-
-**Response body:** `CommentOut[]`
-
-### `POST /listings/{id}/comments`
-
-Create a comment on a listing. Only allowed while the listing is `open`.
-
-**Request body:**
-```json
-{
-  "text": "Is this still available?"
-}
-```
-
-**Response body:** `CommentOut`
 
 ## Messages
 
