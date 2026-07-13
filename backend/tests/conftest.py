@@ -8,8 +8,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import StaticPool, create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.auth_utils import create_session_token
 from app.database import Base, get_db
 from app.main import app
+from app.models import User
 from app.services.rate_limiter import rate_limiter
 
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
@@ -83,8 +85,44 @@ def client2():
 
 
 @pytest.fixture(scope="function")
+def user(client, db):
+    """Create a verified user, set the session cookie, and return the user."""
+    u = User(
+        email=f"test-{uuid.uuid4().hex[:8]}@example.com",
+        domain="example.com",
+        company_name="Example",
+        display_name="Test",
+        is_verified=True,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    token = create_session_token(u.id)
+    client.cookies.set("wm_session", token)
+    u.token = token
+    return u
+
+
+@pytest.fixture(scope="function")
+def other_user(db):
+    """Create a second verified user and return it."""
+    u = User(
+        email=f"other-{uuid.uuid4().hex[:8]}@example.com",
+        domain="example.com",
+        company_name="Other",
+        display_name="Other",
+        is_verified=True,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    u.token = create_session_token(u.id)
+    return u
+
+
+@pytest.fixture(scope="function")
 def auth_user(client, monkeypatch):
-    """Create a verified user and return the TestClient + user JSON."""
+    """Create a verified user via the auth flow and return the client and user."""
     monkeypatch.setattr(
         "app.services.email_validation.dns.resolver.resolve",
         lambda *args, **kwargs: [Mock()],
