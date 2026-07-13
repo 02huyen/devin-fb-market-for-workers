@@ -46,9 +46,7 @@ export default function MessagesPage() {
           <p className="mt-4 text-slate-500">No conversations yet.</p>
         ) : (
           <div className="mt-4 space-y-3">
-            {conversations.map((conv) => {
-              const other = conv.buyer.id === user.id ? conv.seller : conv.buyer;
-              return (
+            {conversations.map((conv) => (
                 <Link
                   key={conv.id}
                   href={`/messages/${conv.id}`}
@@ -56,9 +54,9 @@ export default function MessagesPage() {
                 >
                   <div>
                     <p className="font-semibold text-slate-900">
-                      {other.display_name} · {other.company_name}
+                      {conv.other_participant.display_name} · {conv.other_participant.company_name}
                     </p>
-                    <p className="text-sm text-slate-500">Listing #{conv.listing_id}</p>
+                    <p className="text-sm text-slate-500">{conv.listing.title}</p>
                   </div>
                   {conv.unread_count > 0 && (
                     <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-semibold text-white">
@@ -66,8 +64,7 @@ export default function MessagesPage() {
                     </span>
                   )}
                 </Link>
-              );
-            })}
+            ))}
           </div>
         )}
       </div>

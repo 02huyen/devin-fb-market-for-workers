@@ -1,4 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+export function getImageUrl(url: string): string {
+  if (url.startsWith("http")) return url;
+  return `${API_URL}${url}`;
+}
 
 export interface User {
   id: number;
@@ -34,14 +39,28 @@ export interface CommentInput {
   text: string;
 }
 
+export interface Participant {
+  id: number;
+  display_name: string;
+  company_name: string;
+}
+
+export interface ListingSnippet {
+  id: number;
+  title: string;
+  listing_type: string;
+}
+
 export interface Conversation {
   id: number;
   listing_id: number;
-  buyer: User;
-  seller: User;
-  updated_at: string;
-  created_at: string;
+  buyer_id: number;
+  listing: ListingSnippet;
+  other_participant: Participant;
   unread_count: number;
+  created_at: string;
+  updated_at: string;
+  last_message?: Message;
 }
 
 export interface Message {
@@ -49,7 +68,7 @@ export interface Message {
   text: string;
   read_at: string | null;
   created_at: string;
-  sender: User;
+  sender: Participant;
 }
 
 export interface MessageInput {
@@ -66,7 +85,7 @@ export interface Listing {
   latitude: number | null;
   longitude: number | null;
   is_active: boolean;
-  status: "open" | "sold" | "expired";
+  status: "open" | "sold" | "expired" | "removed";
   expires_at: string | null;
   created_at: string;
   seller: Seller;

@@ -81,17 +81,25 @@ def list_listings(
     user: User = Depends(get_current_user),
 ):
     _expire_old_listings(db)
-    if not status:
+    if status == "":
         status = "open"
-    if status not in LISTING_STATUSES:
-        raise HTTPException(status_code=400, detail="Invalid status")
 
     query = db.query(Listing).options(
         joinedload(Listing.seller), joinedload(Listing.images)
     )
-    if status == "removed":
+
+    if seller_id is not None:
+        query = query.filter(Listing.seller_id == seller_id)
+
+    if status == "all":
+        query = query.filter(
+            or_(Listing.status != "removed", Listing.seller_id == user.id)
+        )
+    elif status == "removed":
         query = query.filter(Listing.status == status, Listing.seller_id == user.id)
     else:
+        if status not in LISTING_STATUSES:
+            raise HTTPException(status_code=400, detail="Invalid status")
         query = query.filter(Listing.status == status)
 
     if q:
@@ -101,8 +109,6 @@ def list_listings(
         if listing_type not in LISTING_TYPES:
             raise HTTPException(status_code=400, detail="Invalid listing type")
         query = query.filter(Listing.listing_type == listing_type)
-    if seller_id is not None:
-        query = query.filter(Listing.seller_id == seller_id)
 
     listings = query.order_by(Listing.created_at.desc()).all()
 
