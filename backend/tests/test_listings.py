@@ -219,6 +219,16 @@ def test_invalid_status(user, client):
     assert res.status_code == 400
 
 
+def test_all_status_filter(user, client):
+    open_item = _create_listing(client, title="Open item").json()
+    sold = _create_listing(client, title="Sold item").json()
+    client.patch(f"/listings/{sold['id']}/status", json={"status": "sold"})
+
+    items = client.get("/listings?status=all").json()
+    assert any(item["id"] == open_item["id"] for item in items)
+    assert any(item["id"] == sold["id"] for item in items)
+
+
 def test_renew_requires_non_open(user, client):
     created = _create_listing(client).json()
     res = client.post(f"/listings/{created['id']}/renew")

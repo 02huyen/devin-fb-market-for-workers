@@ -14,6 +14,7 @@ import {
   renewListing,
   uploadImage,
   logout,
+  getImageUrl,
 } from "@/lib/api";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -32,12 +33,14 @@ const STATUS_LABELS: Record<string, string> = {
   open: "Open",
   sold: "Sold",
   expired: "Expired",
+  removed: "Removed",
 };
 
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-800",
   sold: "bg-slate-200 text-slate-700",
   expired: "bg-red-100 text-red-800",
+  removed: "bg-slate-300 text-slate-700",
 };
 
 export default function MarketPage() {
@@ -212,7 +215,8 @@ export default function MarketPage() {
             <option value="open">Open</option>
             <option value="sold">Sold</option>
             <option value="expired">Expired</option>
-            <option value="">All statuses</option>
+            <option value="removed">Removed</option>
+            <option value="all">All statuses</option>
           </select>
           {useLocation ? (
             <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -300,7 +304,6 @@ export default function MarketPage() {
                 }
                 className="rounded-lg border border-slate-300 px-2 py-1"
               >
-                <option value={1}>1 day</option>
                 <option value={7}>7 days</option>
                 <option value={14}>14 days</option>
                 <option value={30}>30 days</option>
@@ -335,7 +338,7 @@ export default function MarketPage() {
                   <Link href={`/market/${item.id}`} className="block focus:outline-none">
                     {item.images[0] && (
                       <img
-                        src={item.images[0].url}
+                        src={getImageUrl(item.images[0].url)}
                         alt={item.title}
                         className="h-40 w-full rounded-lg object-cover mb-3"
                       />
@@ -380,7 +383,7 @@ export default function MarketPage() {
                           Mark as sold
                         </button>
                       )}
-                      {(item.status === "sold" || item.status === "expired") && (
+                      {(item.status === "sold" || item.status === "expired" || item.status === "removed") && (
                         <button
                           onClick={(e) => {
                             e.preventDefault();

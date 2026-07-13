@@ -1,27 +1,29 @@
 # Agent brief: ECHO — Messaging & Comments
 
 ## Context
-**Workplace Market** is a scam-free marketplace of verified professionals (work-email login). The MVP backend (`backend/`, FastAPI + SQLAlchemy) has auth (Atlas) and listings (Mercury); the frontend (`frontend/`, Next.js) is owned by Nova. Your job is the social layer: public comments on listings and private DMs about a listing.
+**Workplace Market** is a scam-free marketplace of verified professionals (work-email login). Auth, listings, comments, and DMs are now built. The backend is `backend/` (FastAPI + SQLAlchemy), the frontend is `frontend/` (Next.js). Comments live in `backend/app/routers/listings.py`; DMs live in `backend/app/routers/messages.py`.
 
 Key areas you own:
-- `backend/app/routers/comments.py` (create)
-- `backend/app/routers/messages.py` (create)
-- Comment/DM-related models — propose additions to `models.py`/`schemas.py` via PR to Mercury (the models owner), or in a small isolated PR that only adds new classes without touching existing ones.
+- `backend/app/routers/listings.py` (comments routes)
+- `backend/app/routers/messages.py` (conversation and message routes)
+- `backend/app/models.py` and `schemas.py` for `Comment`/`Conversation`/`Message` — coordinate with Mercury if models need structural changes.
 
 ## Goal
 1. **Comments on listings** (public Q&A, like FB Marketplace):
-   - `Comment` model: id, listing_id, author_id, body, created_at, is_deleted (soft delete).
-   - `GET /listings/{id}/comments`, `POST /listings/{id}/comments`, `DELETE /comments/{id}` (author or listing owner only).
-   - Comments allowed only on `open` listings; read-only once sold/expired.
+   - `Comment` model: id, listing_id, author_id, body, created_at, is_deleted.
+   - `GET /listings/{id}/comments`, `POST /listings/{id}/comments`, `DELETE /listings/{id}/comments/{comment_id}` (author or listing owner only).
+   - Comments are already read-only on `sold`/`expired` listings; polish deletion, pagination, and author-only edit.
 2. **DMs about a listing** (private buyer↔seller):
-   - `Conversation` model keyed on (listing_id, buyer_id) — one thread per buyer per listing; `Message` model: conversation_id, sender_id, body, created_at, read_at.
-   - `POST /listings/{id}/conversations` (start/reuse thread), `GET /conversations` (my inbox with unread counts), `GET/POST /conversations/{id}/messages`.
+   - `Conversation` model keyed on `(listing_id, buyer_id)` — one thread per buyer per listing; `Message` model: conversation_id, sender_id, body, created_at, read_at.
+   - `POST /messages/conversations?listing_id=...` (start/reuse thread), `GET /messages/conversations`, `GET /messages/conversations/{id}/messages`, `POST /messages/conversations/{id}/messages`, `POST /messages/conversations/{id}/read`.
    - Only the buyer and the listing's seller can access a conversation.
-   - Polling is fine for MVP (frontend refetch); document a WebSocket upgrade path but don't build it yet.
-3. Document all endpoints in `docs/API_CONTRACT.md` (Mercury owns the file — add your section via PR).
+   - Polling is fine for MVP; document a WebSocket upgrade path.
+3. Document all endpoint changes in `docs/API_CONTRACT.md`.
 
 ## Rules
-- Only add new files under `backend/app/routers/` and new model/schema classes; never modify auth code or existing listing endpoints.
+- Only edit `backend/app/routers/listings.py` (comments), `backend/app/routers/messages.py`, `models.py`/`schemas.py` for new fields, and `docs/API_CONTRACT.md`.
+- Never modify auth code (`auth.py`) or listing lifecycle endpoints unless explicitly asked.
 - All endpoints require authentication (`get_current_user`); enforce participant-only access on every conversation/message route.
 - One feature branch, one PR per task. Never push to `main`.
 - Frontend UI for comments/DMs is Nova's — coordinate via the API contract, don't edit `frontend/`.
+- See `docs/AGENT_ONBOARDING.md` for the current project overview.

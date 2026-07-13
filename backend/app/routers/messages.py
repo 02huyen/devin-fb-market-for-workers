@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload
 
@@ -9,7 +9,7 @@ from ..database import get_db
 from ..models import Conversation, Listing, Message, User
 from ..schemas import ConversationIn, ConversationOut, MessageIn, MessageOut
 
-router = APIRouter(tags=["messages"])
+router = APIRouter(prefix="/messages", tags=["messages"])
 
 
 def _participant_check(conversation: Conversation, user: User) -> None:
@@ -77,10 +77,10 @@ def _build_conversation(
     )
 
 
-@router.post("/listings/{listing_id}/conversations", response_model=ConversationOut, status_code=201)
+@router.post("/conversations", response_model=ConversationOut, status_code=201)
 def start_conversation(
-    listing_id: int,
-    payload: ConversationIn,
+    listing_id: int = Query(...),
+    payload: ConversationIn | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -108,7 +108,7 @@ def start_conversation(
         db.commit()
         db.refresh(conversation)
 
-    if payload.text:
+    if payload and payload.text:
         message = Message(
             conversation_id=conversation.id,
             sender_id=user.id,
@@ -215,3 +215,28 @@ def create_message(
     db.commit()
     db.refresh(message)
     return message
+
+
+@router.post("/conversations/{conversation_id}/read")
+def mark_read(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    conversation = (
+        db.query(Conversation)
+        .options(joinedload(Conversation.listing))
+        .filter(Conversation.id == conversation_id)
+        .first()
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    _participant_check(conversation, user)
+
+    db.query(Message).filter(
+        Message.conversation_id == conversation_id,
+        Message.sender_id != user.id,
+        Message.read_at.is_(None),
+    ).update({Message.read_at: datetime.utcnow()})
+    db.commit()
+    return {"message": "Marked as read"}

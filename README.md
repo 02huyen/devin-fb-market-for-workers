@@ -21,6 +21,26 @@ npm install && npm run dev
 
 Sign in with any real company email (e.g. `you@yourcompany.com`). In dev mode the magic link is shown inline on the login page — no email provider needed. Gmail/Yahoo/disposable domains are rejected.
 
+## Testing
+
+Backend tests use pytest and `fastapi.testclient` with a temporary SQLite DB:
+
+```bash
+cd backend
+.venv/bin/pytest
+.venv/bin/ruff check app
+```
+
+Frontend tests use Jest + Testing Library:
+
+```bash
+cd frontend
+npm test -- --watchAll=false
+npm run lint
+npx tsc --noEmit
+npm run build
+```
+
 ## Docker local dev
 
 One-command setup with Postgres, backend, and frontend:
@@ -44,4 +64,5 @@ The first build may take a few minutes. Use `docker compose down -v` to remove t
 | `FRONTEND_URL` | backend | For magic links + CORS (default `http://localhost:3000`) |
 | `APP_SECRET_KEY` | backend | Session cookie signing (set in production) |
 | `APP_ENV` | backend | `dev` (inline magic link) or `production` |
-| `EMAIL_VERIFY_API_KEY` | backend | Optional Abstract API key for company enrichment |
+| `RESEND_API_KEY` | backend | Optional, for real magic-link email delivery |
+| `HUNTER_API_KEY` / `EMAIL_VERIFY_API_KEY` | backend | Optional company-enrichment APIs |

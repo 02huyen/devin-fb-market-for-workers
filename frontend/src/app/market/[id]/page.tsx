@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Comment, Listing, User, getListing, getMe, getComments, createComment, uploadImage, startConversation } from "@/lib/api";
+import { Comment, Listing, User, getListing, getMe, getComments, createComment, uploadImage, startConversation, getImageUrl } from "@/lib/api";
 
 const TYPE_LABELS: Record<string, string> = {
   sell: "For sale",
@@ -15,12 +15,14 @@ const STATUS_LABELS: Record<string, string> = {
   open: "Open",
   sold: "Sold",
   expired: "Expired",
+  removed: "Removed",
 };
 
 const STATUS_COLORS: Record<string, string> = {
   open: "bg-emerald-100 text-emerald-800",
   sold: "bg-slate-200 text-slate-700",
   expired: "bg-red-100 text-red-800",
+  removed: "bg-slate-300 text-slate-700",
 };
 
 export default function ListingDetailPage() {
@@ -184,7 +186,7 @@ export default function ListingDetailPage() {
               {listing.images.map((img) => (
                 <img
                   key={img.id}
-                  src={img.url}
+                  src={getImageUrl(img.url)}
                   alt={listing.title}
                   className="w-full rounded-lg object-cover"
                 />

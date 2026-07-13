@@ -122,7 +122,7 @@ List listings. Defaults to `status=open` (active, non-expired listings).
 
 - `q` — keyword search across `title` and `description`.
 - `listing_type` — `sell`, `buy`, or `giveaway`.
-- `status` — `open`, `sold`, `expired`, or `removed`. Default: `open`. `removed` is restricted to the seller's own listings.
+- `status` — `open`, `sold`, `expired`, `removed`, or `all`. Default: `open`. `removed` is restricted to the seller's own listings; `all` shows every non-removed listing plus the current seller's own removed listings.
 - `lat`, `lng` — center for radius filtering.
 - `radius_miles` — default `50.0`.
 - `seller_id` — filter by a specific seller.
@@ -281,6 +281,50 @@ Create a comment on a listing. Only allowed while the listing is `open`.
 
 ## Messages
 
+### Common types
+
+#### `ConversationOut`
+
+```json
+{
+  "id": 1,
+  "listing_id": 1,
+  "buyer_id": 2,
+  "listing": {
+    "id": 1,
+    "title": "Desk chair",
+    "listing_type": "sell"
+  },
+  "other_participant": {
+    "id": 1,
+    "display_name": "Seller",
+    "company_name": "Company"
+  },
+  "unread_count": 0,
+  "created_at": "2026-07-12T15:55:07.704476",
+  "updated_at": "2026-07-12T15:55:07.704476",
+  "last_message": null
+}
+```
+
+#### `MessageOut`
+
+```json
+{
+  "id": 1,
+  "conversation_id": 1,
+  "sender_id": 2,
+  "text": "Hello, is this still available?",
+  "created_at": "2026-07-12T15:55:07.704476",
+  "read_at": null,
+  "sender": {
+    "id": 2,
+    "display_name": "Buyer",
+    "company_name": "Company"
+  }
+}
+```
+
 ### `GET /messages/conversations`
 
 List the authenticated user's conversations.
@@ -292,7 +336,7 @@ List the authenticated user's conversations.
 Start a conversation about a listing.
 
 - **Query parameter:** `listing_id` (int)
-- **Success (200):** `ConversationOut`
+- **Success (201):** `ConversationOut`
 - **Errors:**
   - `400` — Cannot message yourself.
   - `404` — Listing not found.
